@@ -1,0 +1,8 @@
+agent-framework
+fastapi
+uvicorn[standard]
+python-dotenv
+azure-identity
+azure-ai-projects
+azure-ai-documentintelligence
+pydantic
