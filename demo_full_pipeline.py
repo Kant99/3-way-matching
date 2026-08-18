@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime, timezone
 
 from app.agents.matching_agent import create_matching_agent
 from app.capabilities.contract_extractor import ContractExtractor
@@ -27,7 +28,7 @@ from app.repositories.in_memory_hitl_case_repository import (
 # DEMO CONFIGURATION
 # ============================================================
 
-DEMO_DISCREPANCY = False
+DEMO_DISCREPANCY = True
 
 # Keep evidence permanently so it can be opened after the demo.
 EVIDENCE_OUTPUT_DIR = "outputs/evidence_demo"
@@ -606,11 +607,66 @@ Do not invent a human decision.
         # ----------------------------------------------------
         # Controlled human decision for POC demonstration
         # ----------------------------------------------------
-
+        # ============================================================
+        # HUMAN-IN-THE-LOOP REVIEW
+        # ============================================================
+        
+        print()
+        print("=" * 60)
+        print("HUMAN REVIEW REQUIRED")
+        print("=" * 60)
+        
         print(
-            "\n  [DEMO] Human reviewer selects: APPROVE"
+            f"Case ID : {hitl_case.case_id}"
         )
-
+        
+        print(
+            f"Status  : {hitl_case.status.value}"
+        )
+        
+        print()
+        print("Review the generated evidence image(s):")
+        
+        for evidence in hitl_case.evidence:
+            print(
+                f"  {evidence.get('snip_path')}"
+            )
+        
+        print()
+        print(
+            "The case is currently PENDING."
+        )
+        
+        print(
+            "Type APPROVED and press Enter "
+            "to complete the human review."
+        )
+        
+        print(
+            "The program will NOT continue automatically."
+        )
+        
+        while True:
+        
+            reviewer_input = input(
+                "\nReviewer input: "
+            ).strip()
+        
+            if reviewer_input.upper() == "APPROVED":
+                break
+            
+            print(
+                "Invalid input."
+            )
+        
+            print(
+                "Please type APPROVED."
+            )
+        
+        
+        print()
+        print("✓ APPROVED received from reviewer.")
+        
         decision = HITLDecision(
             decision=HITLDecisionType.APPROVE,
             reviewer="reviewer-001",
@@ -618,15 +674,20 @@ Do not invent a human decision.
                 "Invoice reviewed and "
                 "commercially approved."
             ),
+            timestamp=datetime.now(timezone.utc),
         )
-
+        
         reviewed_case = (
             hitl_service.apply_decision(
                 hitl_case.case_id,
                 decision,
             )
         )
-
+        
+        print(
+            f"Final Status : "
+            f"{reviewed_case.status.value}"
+        )
         # ----------------------------------------------------
         # Recover case from repository
         # ----------------------------------------------------

@@ -10,6 +10,11 @@ from app.models.invoice import Invoice
 from app.models.line_item import LineItem
 from app.models.purchase_order import PurchaseOrder
 from app.models.source_reference import SourceReference
+from app.capabilities.hitl_routing import HITLRoutingCapability
+from app.models.validation_result import (
+    ValidationException,
+    ValidationResult,
+)
 
 
 class LineAmountResult(BaseModel):
@@ -198,4 +203,109 @@ def run_3_way_matching(
             }
             for exception in result.exceptions
         ],
+    }
+
+@tool(
+    name="route_to_hitl",
+    description=(
+        "Route a deterministic validation exception to a human "
+        "reviewer. Use this tool only when the validation result "
+        "has status EXCEPTION. This tool creates a pending HITL "
+        "case and does not approve, reject, or override the "
+        "financial validation result."
+    ),
+)
+def route_to_hitl(
+    validation_result: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Convert a deterministic validation result into a HITL case.
+
+    This is an adapter between the MAF agent tool interface and
+    the deterministic HITLRoutingCapability.
+    """
+
+    exceptions = []
+
+    for exception in validation_result.get("exceptions", []):
+        source_data = exception.get("source")
+
+        source = None
+
+        if source_data:
+            source = SourceReference(
+                document_id=source_data.get("document_id"),
+                document_path=source_data.get("document_path"),
+                page_number=source_data.get("page_number"),
+                polygon=source_data.get("polygon"),
+            )
+
+        exceptions.append(
+            ValidationException(
+                type=exception.get("type"),
+                item_code=exception.get("item_code"),
+                field=exception.get("field"),
+                expected=exception.get("expected"),
+                actual=exception.get("actual"),
+                tolerance=exception.get("tolerance"),
+                source=source,
+                evidence=exception.get("evidence", []),
+            )
+        )
+
+    result = ValidationResult(
+        status=validation_result.get("status"),
+        exceptions=exceptions,
+    )
+
+    router = HITLRoutingCapability()
+
+    hitl_case = router.route(result)
+
+    if hitl_case is None:
+        return {
+            "status": "NO_HITL_REQUIRED",
+            "case": None,
+        }
+
+    return {
+        "status": "HITL_REQUIRED",
+        "case": {
+            "case_id": hitl_case.case_id,
+            "status": hitl_case.status.value,
+            "created_at": hitl_case.created_at.isoformat(),
+            "reviewer": hitl_case.reviewer,
+            "validation_result": {
+                "status": hitl_case.validation_result.status,
+                "exceptions": [
+                    {
+                        "type": exception.type,
+                        "item_code": exception.item_code,
+                        "field": exception.field,
+                        "expected": exception.expected,
+                        "actual": exception.actual,
+                        "tolerance": exception.tolerance,
+                        "source": (
+                            {
+                                "document_id": (
+                                    exception.source.document_id
+                                ),
+                                "document_path": (
+                                    exception.source.document_path
+                                ),
+                                "page_number": (
+                                    exception.source.page_number
+                                ),
+                                "polygon": exception.source.polygon,
+                            }
+                            if exception.source
+                            else None
+                        ),
+                        "evidence": exception.evidence,
+                    }
+                    for exception
+                    in hitl_case.validation_result.exceptions
+                ],
+            },
+        },
     }

@@ -6,6 +6,7 @@ from agent_framework.openai import OpenAIChatCompletionClient
 
 from app.capabilities.matching_tools import (
     calculate_line_amount,
+    route_to_hitl,
     run_3_way_matching,
 )
 
@@ -62,11 +63,22 @@ def create_matching_agent() -> Agent:
             "calculate, recalculate, override, or infer validation "
             "outcomes. When the tool returns exceptions, explain "
             "the returned exception types, fields, expected values, "
-            "actual values, and tolerances using only the tool result."
+            "actual values, and tolerances using only the tool result. "
+            "\n\n"
+            "When the deterministic matching result has status "
+            "EXCEPTION, use the route_to_hitl tool to create a "
+            "pending human-review case. Do not approve, reject, "
+            "or override the exception yourself. "
+            "\n\n"
+            "When routing to HITL, preserve the deterministic "
+            "validation result exactly as returned by the matching "
+            "tool. Do not modify exception values, expected values, "
+            "actual values, tolerances, or evidence."
         ),
         tools=[
             calculate_line_amount,
-            run_3_way_matching
+            run_3_way_matching,
+            route_to_hitl,
         ],
     )
 
