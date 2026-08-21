@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3-Way Matching</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f4f6f9;--card:#fff;--primary:#2563eb;--primary-hover:#1d4ed8;--danger:#ef4444;--success:#16a34a;--warn:#f59e0b;--text:#1e293b;--muted:#64748b;--border:#e2e8f0;--radius:10px}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+header{background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;padding:24px 32px;display:flex;align-items:center;gap:16px}
+header h1{font-size:1.5rem;font-weight:600}
+header span{font-size:.85rem;opacity:.8}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+.card{background:var(--card);border-radius:var(--radius);box-shadow:0 1px 3px rgba(0,0,0,.08);padding:24px;margin-bottom:20px}
+.card h2{font-size:1.1rem;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.75rem;font-weight:600;text-transform:uppercase}
+.badge-pass{background:#dcfce7;color:#166534}
+.badge-exception{background:#fee2e2;color:#991b1b}
+.badge-pending{background:#fef3c7;color:#92400e}
+.badge-reviewed{background:#dbeafe;color:#1e40af}
+btn,.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border:none;border-radius:var(--radius);font-size:.9rem;font-weight:500;cursor:pointer;transition:.2s}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-hover)}
+.btn-success{background:var(--success);color:#fff}.btn-success:hover{background:#15803d}
+.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover{background:#dc2626}
+.btn-warn{background:var(--warn);color:#fff}.btn-warn:hover{background:#d97706}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{text-align:left;padding:10px 12px;background:#f8fafc;border-bottom:2px solid var(--border);color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.5px}
+td{padding:10px 12px;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+.controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.controls label{font-size:.85rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.controls input[type=checkbox]{accent-color:var(--primary);width:16px;height:16px}
+.status-bar{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.status-bar .item{font-size:.85rem;color:var(--muted)}
+.status-bar .item strong{color:var(--text)}
+.exc-card{background:#fef2f2;border-left:4px solid var(--danger);border-radius:6px;padding:14px 16px;margin-bottom:10px}
+.exc-card .exc-title{font-weight:600;color:#991b1b;margin-bottom:6px}
+.exc-card .exc-detail{font-size:.85rem;color:var(--text)}
+.evidence-img{max-width:100%;border-radius:6px;border:1px solid var(--border);margin-top:8px}
+.hitl-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+#loading{display:none;text-align:center;padding:40px;color:var(--muted);font-size:1rem}
+#loading.active{display:block}
+.spinner{display:inline-block;width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hidden{display:none}
+.doc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.doc-item{background:#f8fafc;border-radius:8px;padding:14px;border:1px solid var(--border)}
+.doc-item .label{font-size:.75rem;color:var(--muted);text-transform:uppercase;font-weight:600;margin-bottom:4px}
+.doc-item .value{font-size:.95rem;font-weight:500}
+.toast{position:fixed;bottom:24px;right:24px;background:#1e293b;color:#fff;padding:12px 20px;border-radius:8px;font-size:.9rem;z-index:999;opacity:0;transition:opacity .3s}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
+  <div>
+    <h1>3-Way Matching</h1>
+    <span>Contract &bull; Purchase Order &bull; Invoice</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Run Controls -->
+  <div class="card">
+    <h2>Upload & Run</h2>
+    <div class="controls" style="align-items:flex-start">
+      <label style="flex-direction:column;align-items:flex-start">
+        <span>Contract PDF</span>
+        <input type="file" id="contractFile" accept=".pdf">
+      </label>
+      <label style="flex-direction:column;align-items:flex-start">
+        <span>Purchase Order PDF</span>
+        <input type="file" id="poFile" accept=".pdf">
+      </label>
+      <label style="flex-direction:column;align-items:flex-start">
+        <span>Invoice PDF</span>
+        <input type="file" id="invoiceFile" accept=".pdf">
+      </label>
+    </div>
+    <div class="controls" style="margin-top:12px">
+      <label>
+        <input type="checkbox" id="chkDiscrepancy" checked>
+        Inject demo discrepancy
+      </label>
+      <button class="btn btn-primary" id="btnRun" onclick="runMatching()">
+        Upload & Run
+      </button>
+    </div>
+  </div>
+
+  <div id="loading"><span class="spinner"></span>Running extraction &amp; matching pipeline &hellip;</div>
+
+  <div id="stepsCard" class="card hidden">
+    <h2>Pipeline Steps</h2>
+    <div id="stepsList" style="font-size:.95rem;color:var(--muted);line-height:1.7"></div>
+  </div>
+
+  <!-- Results section -->
+  <div id="results" class="hidden">
+
+    <!-- Documents -->
+    <div class="card">
+      <h2>Documents</h2>
+      <div class="doc-grid" id="docGrid"></div>
+    </div>
+
+    <!-- Line Items -->
+    <div class="card">
+      <h2>Line Items Comparison</h2>
+      <div style="overflow-x:auto">
+        <table id="lineTable">
+          <thead>
+            <tr>
+              <th>Source</th><th>Item Code</th><th>Description</th><th>Qty</th><th>Unit Price</th><th>Amount</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Matching Result -->
+    <div class="card">
+      <h2>Matching Result <span id="statusBadge"></span></h2>
+      <div id="exceptionsArea"></div>
+      <p id="noExceptions" class="hidden" style="color:var(--success);font-weight:500">All documents match — no exceptions found.</p>
+    </div>
+
+    <!-- HITL Review -->
+    <div class="card hidden" id="hitlCard">
+      <h2>Human-in-the-Loop Review</h2>
+      <div class="status-bar" id="hitlStatus"></div>
+      <div class="hitl-actions" id="hitlActions">
+        <button class="btn btn-success" onclick="submitDecision('APPROVE')">Approve</button>
+        <button class="btn btn-danger" onclick="submitDecision('REJECT')">Reject</button>
+        <button class="btn btn-warn" onclick="submitDecision('OVERRIDE')">Override</button>
+      </div>
+      <div id="hitlResult" class="hidden" style="margin-top:14px"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+let lastResult = null;
+let eventSource = null;
+
+function escapeHtml(unsafe) {
+  return String(unsafe)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function appendStep(step, message) {
+  const stepsList = document.getElementById('stepsList');
+  stepsList.innerHTML += `<div><strong>${escapeHtml(step)}:</strong> ${escapeHtml(message)}</div>`;
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+async function runMatching() {
+  const btn = document.getElementById('btnRun');
+  const loading = document.getElementById('loading');
+  const results = document.getElementById('results');
+  const stepsCard = document.getElementById('stepsCard');
+
+  btn.disabled = true;
+  loading.classList.add('active');
+  results.classList.add('hidden');
+  stepsCard.classList.remove('hidden');
+  document.getElementById('stepsList').innerHTML = '';
+
+  if (eventSource) {
+    try { eventSource.close(); } catch (e) {}
+    eventSource = null;
+  }
+
+  try {
+    const contractFile = document.getElementById('contractFile').files?.[0];
+    const poFile = document.getElementById('poFile').files?.[0];
+    const invoiceFile = document.getElementById('invoiceFile').files?.[0];
+
+    if (!contractFile || !poFile || !invoiceFile) {
+      throw new Error('Please select all 3 PDF files (Contract, PO, Invoice).');
+    }
+
+    const form = new FormData();
+    form.append('contract', contractFile);
+    form.append('purchase_order', poFile);
+    form.append('invoice', invoiceFile);
+
+    let uploadRes;
+    try {
+      uploadRes = await fetch(`${API}/api/upload`, {
+        method: 'POST',
+        body: form,
+      });
+    } catch (fetchErr) {
+      throw new Error('Failed to fetch: ' + fetchErr.message);
+    }
+    if (!uploadRes.ok) {
+      const err = await uploadRes.json().catch(() => ({}));
+      throw new Error(err.detail || 'Upload failed');
+    }
+
+    const inject = document.getElementById('chkDiscrepancy').checked;
+
+    await new Promise((resolve, reject) => {
+      const url = `${API}/api/match/stream?inject_discrepancy=${inject}`;
+      eventSource = new EventSource(url);
+      let finished = false;
+
+      eventSource.onmessage = (event) => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch (e) { return; }
+
+        if (msg.type === 'step') {
+          appendStep(msg.step, msg.message);
+          return;
+        }
+
+        if (msg.type === 'done') {
+          finished = true;
+          try { eventSource.close(); } catch (e) {}
+          eventSource = null;
+          lastResult = msg.payload;
+          renderResult(lastResult);
+          results.classList.remove('hidden');
+          resolve();
+          return;
+        }
+
+        if (msg.type === 'error') {
+          finished = true;
+          try { eventSource.close(); } catch (e) {}
+          eventSource = null;
+          reject(new Error(msg.message || 'Matching failed'));
+        }
+      };
+
+      eventSource.onerror = () => {
+        if (finished) return;
+        finished = true;
+        try { eventSource.close(); } catch (e) {}
+        eventSource = null;
+        reject(new Error('Connection error while streaming progress. Try again.'));
+      };
+    });
+  } catch (e) {
+    toast('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    loading.classList.remove('active');
+    // Keep steps visible so the user can see where it failed.
+  }
+}
+
+function renderResult(data) {
+  // Documents
+  const grid = document.getElementById('docGrid');
+  grid.innerHTML = '';
+  for (const [key, doc] of Object.entries(data.documents)) {
+    const label = key.replace('_', ' ');
+    grid.innerHTML += `<div class="doc-item">
+      <div class="label">${label}</div>
+      <div class="value">${doc.number || 'N/A'}</div>
+      <div style="font-size:.8rem;color:var(--muted);margin-top:4px">${doc.filename}</div>
+    </div>`;
+  }
+
+  // Line items table
+  const tbody = document.querySelector('#lineTable tbody');
+  tbody.innerHTML = '';
+  for (const [source, items] of Object.entries(data.line_items)) {
+    const label = source.replace('_', ' ');
+    for (const li of items) {
+      const isException = data.exceptions.some(e => e.item_code === li.item_code);
+      const cls = isException ? 'style="background:#fef2f2"' : '';
+      tbody.innerHTML += `<tr ${cls}>
+        <td style="text-transform:capitalize;font-weight:500">${label}</td>
+        <td>${li.item_code || ''}</td>
+        <td>${li.description || ''}</td>
+        <td>${li.quantity ?? ''}</td>
+        <td>${li.unit_price ?? ''}</td>
+        <td>${li.amount ?? ''}</td>
+      </tr>`;
+    }
+  }
+
+  // Status badge
+  const badge = document.getElementById('statusBadge');
+  if (data.status === 'PASS') {
+    badge.className = 'badge badge-pass';
+    badge.textContent = 'PASS';
+  } else {
+    badge.className = 'badge badge-exception';
+    badge.textContent = 'EXCEPTION';
+  }
+
+  // Exceptions
+  const area = document.getElementById('exceptionsArea');
+  const noExc = document.getElementById('noExceptions');
+  area.innerHTML = '';
+  if (!data.exceptions.length) {
+    noExc.classList.remove('hidden');
+  } else {
+    noExc.classList.add('hidden');
+    for (const exc of data.exceptions) {
+      let evidenceHtml = '';
+      if (exc.evidence) {
+        for (const ev of exc.evidence) {
+          if (ev.snip_url) {
+            evidenceHtml += `<img src="${ev.snip_url}" class="evidence-img" alt="Evidence">`;
+          }
+        }
+      }
+      area.innerHTML += `<div class="exc-card">
+        <div class="exc-title">${exc.type}</div>
+        <div class="exc-detail">
+          <strong>Item:</strong> ${exc.item_code || 'N/A'} &nbsp;
+          <strong>Field:</strong> ${exc.field || 'N/A'}<br>
+          <strong>Expected:</strong> ${exc.expected} &nbsp;
+          <strong>Actual:</strong> ${exc.actual}
+          ${exc.tolerance ? `&nbsp; <strong>Tolerance:</strong> ${exc.tolerance}` : ''}
+        </div>
+        ${evidenceHtml}
+      </div>`;
+    }
+  }
+
+  // HITL card
+  const hitlCard = document.getElementById('hitlCard');
+  const hitlActions = document.getElementById('hitlActions');
+  const hitlResult = document.getElementById('hitlResult');
+  hitlResult.classList.add('hidden');
+
+  if (data.hitl_case) {
+    hitlCard.classList.remove('hidden');
+    hitlActions.classList.remove('hidden');
+    document.getElementById('hitlStatus').innerHTML = `
+      <div class="item"><strong>Case ID:</strong> ${data.hitl_case.case_id}</div>
+      <div class="item"><strong>Status:</strong> <span class="badge badge-pending">${data.hitl_case.status}</span></div>
+      <div class="item"><strong>Evidence:</strong> ${data.hitl_case.evidence_count} image(s)</div>
+    `;
+  } else {
+    hitlCard.classList.add('hidden');
+  }
+}
+
+async function submitDecision(decision) {
+  if (!lastResult?.hitl_case) return;
+  const caseId = lastResult.hitl_case.case_id;
+
+  try {
+    const res = await fetch(`${API}/api/cases/${caseId}/decide`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({decision, reviewer: 'web-reviewer', comment: `${decision} via web UI`}),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Decision failed');
+    }
+    const result = await res.json();
+
+    document.getElementById('hitlActions').classList.add('hidden');
+    const hitlResult = document.getElementById('hitlResult');
+    hitlResult.classList.remove('hidden');
+    const badgeCls = result.status === 'REVIEWED' ? 'badge-reviewed' : 'badge-pending';
+    hitlResult.innerHTML = `
+      <span class="badge ${badgeCls}">${result.status}</span>
+      <span style="margin-left:8px;font-size:.9rem">Decision: <strong>${result.decision}</strong> by ${result.reviewer}</span>
+    `;
+    toast('Decision submitted successfully');
+  } catch (e) {
+    toast('Error: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>
